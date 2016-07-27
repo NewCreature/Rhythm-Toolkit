@@ -1,0 +1,10 @@
+Rhythm Toolkit Issue Tracker
+----------------------------
+
+[ ]Implement editing functionality.
+
+   [ ]Sort events by tick when adding an event.
+
+      [ ]Consider implementing special sort order rules for certain event types.
+
+[ ]Implement save functionality.
