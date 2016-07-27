@@ -32,7 +32,7 @@ static int rtk_parse_midi(RTK_MIDI * mp, int pass)
 	int i, j, track_pos, delta, track_event;
 	unsigned long bytes_used;
 	int d1, d2, d3, d4;
-	
+
 	/* allocate empty tracks on first pass */
 	if(pass == 0)
 	{
@@ -51,7 +51,7 @@ static int rtk_parse_midi(RTK_MIDI * mp, int pass)
 			}
 		}
 	}
-	
+
 	/* allocate space for events on second pass */
 	else if(pass == 1)
 	{
@@ -79,7 +79,7 @@ static int rtk_parse_midi(RTK_MIDI * mp, int pass)
 			}
 		}
 	}
-	
+
 	for(i = 0; i < mp->raw_data->tracks; i++)
 	{	//For each imported track
 		last_midi_event = 0;	//Running status resets at beginning of each track
@@ -87,7 +87,7 @@ static int rtk_parse_midi(RTK_MIDI * mp, int pass)
 		midi_event = 0;
 		midi_event_type = 0;
 		midi_meta_event = 0;
-		
+
 		track_pos = 0;
 		track_event = 0;
 		while(track_pos < mp->raw_data->track[i].len)
@@ -115,7 +115,7 @@ static int rtk_parse_midi(RTK_MIDI * mp, int pass)
 				track_pos++;	//Increment buffer pointer past the status byte
 			}
 			midi_event_type = midi_event & 0xF0;
-			
+
 			/* don't used filtered data for meta events */
 			if(midi_event_type == 0xF0)
 			{
@@ -237,7 +237,7 @@ static int rtk_parse_midi(RTK_MIDI * mp, int pass)
 							{
 								mp->track[i]->event[track_event]->data_i[0] = d4;
 							}
-							
+
 							/* count tempo events so we know how much space to allocate later */
 							else if(pass == 0)
 							{
@@ -253,7 +253,7 @@ static int rtk_parse_midi(RTK_MIDI * mp, int pass)
 							d2 = (mp->raw_data->track[i].data[track_pos++]);	//Denominator
 							d3 = (mp->raw_data->track[i].data[track_pos++]);	//Metronome
 							d4 = (mp->raw_data->track[i].data[track_pos++]);	//32nds
-							
+
 							if(pass == 1)
 							{
 								mp->track[i]->event[track_event]->data_i[0] = d1;
@@ -337,7 +337,7 @@ static void rtk_build_tempo_map(RTK_MIDI * mp)
 	double current_bpm = 120.0;
 	unsigned long current_tick = 0;
 	double current_time = 0.0;
-	
+
 	/* allocate storage for tempo events */
 	mp->tempo_event = malloc(sizeof(RTK_MIDI_EVENT *) * mp->tempo_events);
 	if(mp->tempo_event)
@@ -354,7 +354,7 @@ static void rtk_build_tempo_map(RTK_MIDI * mp)
 				return;
 			}
 		}
-		
+
 		/* iterate through all events, copying any tempo change found */
 		for(i = 0; i < mp->tracks; i++)
 		{
@@ -368,7 +368,7 @@ static void rtk_build_tempo_map(RTK_MIDI * mp)
 			}
 		}
 		qsort(mp->tempo_event, mp->tempo_events, sizeof(RTK_MIDI_EVENT *), rtk_tempo_map_qsort_callback);
-		
+
 		/* generate real time data for tempo map */
 		for(i = 0; i < mp->tempo_events; i++)
 		{
@@ -410,7 +410,7 @@ static double rtk_get_real_time(RTK_MIDI * mp, unsigned long tick)
 			current_tick = mp->tempo_event[current_tempo_event]->tick;
 		}
 	}
-	
+
 	/* add the remaining time from the tempo change to the desired tick */
 	current_time += rtk_tick_to_real_time(mp->raw_data->divisions, current_bpm, tick - current_tick);
 
@@ -421,10 +421,10 @@ static double rtk_get_real_time(RTK_MIDI * mp, unsigned long tick)
 static void rtk_get_event_real_times(RTK_MIDI * mp)
 {
 	int i, j;
-	
+
 	/* build the tempo map so we can calculate the real times */
 	rtk_build_tempo_map(mp);
-	
+
 	for(i = 0; i < mp->tracks; i++)
 	{
 		for(j = 0; j < mp->track[i]->events; j++)
@@ -438,7 +438,7 @@ static void rtk_get_event_real_times(RTK_MIDI * mp)
 static void rtk_get_track_names(RTK_MIDI * mp)
 {
 	int i, j;
-	
+
 	for(i = 0; i < mp->tracks; i++)
 	{
 		for(j = 0; j < mp->track[i]->events; j++)
@@ -472,7 +472,7 @@ RTK_MIDI * rtk_load_midi(const char * fn)
 		return NULL;
 	}
 	memset(midi, 0, sizeof(RTK_MIDI));
-	
+
 	midi->raw_data = malloc(sizeof(RTK_MIDI_DATA));
 	if(!midi->raw_data)
 	{
@@ -530,7 +530,7 @@ RTK_MIDI * rtk_load_midi(const char * fn)
 	}
 
 	rtk_io_fclose(fp);
-	
+
 	/* convert raw MIDI data to something useful */
 	rtk_parse_midi(midi, 0);
 	rtk_parse_midi(midi, 1);
@@ -550,11 +550,105 @@ RTK_MIDI * rtk_load_midi(const char * fn)
 void rtk_destroy_midi(RTK_MIDI * mp)
 {
 	int i;
-	
+
 	for(i = 0; i < mp->tracks; i++)
 	{
 		free(mp->track[i]);
 	}
 	free(mp->track);
 	free(mp->raw_data);
+}
+
+static double rtk_get_tick_sec(RTK_MIDI * mp, double bpm)
+{
+	return 1.0 / (mp->raw_data->divisions * bpm) / 60.0;
+}
+
+int rtk_sec_to_tick(RTK_MIDI * mp, float sec)
+{
+	double cur_sec = 0.0;
+	double tick_sec = rtk_get_tick_sec(mp, 120.0);
+	int tick = 0;
+	int tempo_change = 0;
+	int i;
+
+	while(cur_sec < sec)
+	{
+		if(tempo_change < mp->tempo_events)
+		{
+			if(tick >= mp->tempo_event[tempo_change]->tick)
+			{
+				tick_sec = rtk_get_tick_sec(mp, rtk_ppqn_to_bpm(mp->tempo_event[tempo_change]->data_i[0]));
+				cur_sec = mp->tempo_event[tempo_change]->pos_sec;
+				tempo_change++;
+			}
+		}
+		cur_sec += tick_sec;
+		if(cur_sec >= sec)
+		{
+			return tick;
+		}
+		tick++;
+	}
+	return 0;
+}
+
+int rtk_add_midi_event_sec(RTK_MIDI * mp, int track, float sec, int type, int meta, int channel, char * data, int data_size)
+{
+	RTK_MIDI_EVENT ** event = NULL;
+	int i;
+
+	/* expand event */
+	event = mp->track[track]->event;
+	event = malloc(sizeof(RTK_MIDI_EVENT *) * mp->track[track]->events + 1);
+	if(event)
+	{
+		for(i = 0; i < mp->track[track]->events; i++)
+		{
+			event[i] = mp->track[track]->event[i];
+		}
+		event[mp->track[track]->events] = malloc(sizeof(RTK_MIDI_EVENT));
+		if(event[mp->track[track]->events])
+		{
+			memset(event[mp->track[track]->events], 0, sizeof(RTK_MIDI_EVENT));
+			event[mp->track[track]->events]->tick = rtk_sec_to_tick(mp, sec);
+			event[mp->track[track]->events]->type = type;
+			event[mp->track[track]->events]->meta_type = meta;
+			event[mp->track[track]->events]->channel = channel;
+			if(data)
+			{
+				for(i = 0; i < data_size; i++)
+				{
+					event[mp->track[track]->events]->data[i] = data[i];
+				}
+			}
+			free(mp->track[track]->event);
+			mp->track[track]->event = event;
+			return 1;
+		}
+	}
+
+	if(event)
+	{
+		free(event);
+	}
+	return 0;
+}
+
+void rtk_delete_midi_event(RTK_MIDI * mp, int track, int event)
+{
+	int i;
+
+	if(track < mp->tracks)
+	{
+		if(event < mp->track[track]->events)
+		{
+			free(mp->track[track]->event[event]);
+			for(i = event; i < mp->track[track]->events - 1; i++)
+			{
+				mp->track[track]->event[i] = mp->track[track]->event[i + 1];
+			}
+			mp->track[track]->events--;
+		}
+	}
 }
